@@ -18,7 +18,7 @@ jobs:
           cache: gradle
 
       - name: Install SDK and NDK pieces
-        run: (yes | sdkmanager --licenses || true) > /dev/null; sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
+        run: (yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true) > /dev/null; $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
 
       - name: Build debug APK
         working-directory: examples/whisper.android
