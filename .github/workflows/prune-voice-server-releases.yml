@@ -1,0 +1,55 @@
+name: prune-voice-server-releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: Number of newest voice-server-* releases to keep
+        required: true
+        default: "10"
+      dry_run:
+        description: List what would be deleted without deleting
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune old voice-server releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KEEP: ${{ inputs.keep }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$KEEP" =~ ^[0-9]+$ ]]; then
+            echo "::error::keep must be a whole number"
+            exit 1
+          fi
+          gh release list --limit 1000 --json tagName,createdAt \
+            | jq -r --argjson keep "$KEEP" '
+                [.[] | select(.tagName | startswith("voice-server-"))]
+                | sort_by(.createdAt)
+                | reverse
+                | .[$keep:]
+                | .[].tagName' > stale.txt
+          if [ ! -s stale.txt ]; then
+            echo "Nothing to prune"
+            exit 0
+          fi
+          echo "Releases beyond the newest $KEEP:"
+          cat stale.txt
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run: nothing deleted."
+            exit 0
+          fi
+          while read -r tag; do
+            echo "Deleting $tag"
+            gh release delete "$tag" --cleanup-tag --yes
+          done < stale.txt
