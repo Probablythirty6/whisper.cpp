@@ -123,6 +123,20 @@ class VoiceServerService : Service() {
             }
             val ctx = whisper
                 ?: return json(Response.Status.SERVICE_UNAVAILABLE, JSONObject().put("error", "model not ready").put("status", status))
+            if ((session.headers["content-type"] ?: "").startsWith("multipart/form-data")) {
+                val parts = HashMap<String, String>()
+                try {
+                    session.parseBody(parts)
+                    val path = parts["file"]
+                        ?: return json(Response.Status.BAD_REQUEST, JSONObject().put("error", "missing file field"))
+                    val samples = decodeWaveFile(File(path))
+                    val text = runBlocking { ctx.transcribeData(samples, false) }.trim()
+                    return json(Response.Status.OK, JSONObject().put("text", text))
+                } catch (e: Exception) {
+                    Log.e(TAG, "multipart transcribe failed", e)
+                    return json(Response.Status.INTERNAL_ERROR, JSONObject().put("error", e.message ?: "transcribe failed"))
+                }
+            }
             val len = session.headers["content-length"]?.toIntOrNull()
             if (len == null || len < 44 || len > 10_000_000) {
                 return json(Response.Status.BAD_REQUEST, JSONObject().put("error", "bad or missing content-length"))
