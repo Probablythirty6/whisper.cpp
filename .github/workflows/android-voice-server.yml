@@ -4,12 +4,20 @@ on:
   workflow_dispatch:
   push:
     branches: [dfr1221-voice-server]
+    paths:
+      - "examples/whisper.android/**"
+      - ".github/workflows/android-voice-server.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-voice-server
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -18,6 +26,12 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: gradle
+
+      - name: Keep the debug signing key between builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
 
       - name: Install SDK and NDK pieces
         run: (yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true) > /dev/null; $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
@@ -33,7 +47,11 @@ jobs:
           name: dfr1221-voice-server-apk
           path: examples/whisper.android/app/build/outputs/apk/debug/*.apk
 
-      - name: Publish release
+      - name: Publish to the fixed latest tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "voice-server-${{ github.run_number }}" examples/whisper.android/app/build/outputs/apk/debug/app-debug.apk --title "DFR1221 voice server ${{ github.run_number }}" --notes "Debug APK" --target ${{ github.sha }}
+        run: |
+          APK=examples/whisper.android/app/build/outputs/apk/debug/app-debug.apk
+          SUM=$(sha256sum "$APK" | cut -d' ' -f1)
+          gh release delete voice-server-latest --cleanup-tag --yes || true
+          gh release create voice-server-latest "$APK" --title "DFR1221 voice server (latest)" --notes "Debug APK built from ${GITHUB_SHA::7}. sha256 $SUM" --target "$GITHUB_SHA"
